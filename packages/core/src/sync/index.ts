@@ -6,6 +6,7 @@ import { z } from "zod";
 import { AuthoredModel, AuthoredModelShape, ModelMetadata } from "../schema.js";
 import { openMissingModelIssues } from "./missing-issues.js";
 import { MissingReasoningOptionsError } from "./missing-reasoning-options.js";
+import { aiand } from "./providers/aiand.js";
 import { ambient } from "./providers/ambient.js";
 import { anthropic } from "./providers/anthropic.js";
 import { baseten } from "./providers/baseten.js";
@@ -18,6 +19,8 @@ import { deepinfra } from "./providers/deepinfra.js";
 import { digitalocean } from "./providers/digitalocean.js";
 import { edenai } from "./providers/edenai.js";
 import { empiriolabs } from "./providers/empiriolabs.js";
+import { fireworksAi } from "./providers/fireworks-ai.js";
+import { friendli } from "./providers/friendli.js";
 import { githubCopilot } from "./providers/github-copilot.js";
 import { google } from "./providers/google.js";
 import { hyper } from "./providers/hyper.js";
@@ -97,6 +100,12 @@ export interface SyncProvider<SourceModel> {
    * undefined to skip silently (no notice, no missing-model issue).
    */
   sourceID?(model: SourceModel): string | undefined;
+  /**
+   * Return the ID when a source model skipped by translateModel needs a
+   * missing-model issue. Existing local metadata for that ID is preserved.
+   * Return undefined for intentional skips.
+   */
+  missingModelID?(model: SourceModel): string | undefined;
   skippedNotice?(ids: string[]): string[];
   fetchModels(): Promise<unknown>;
   parseModels(raw: unknown): SourceModel[];
@@ -132,6 +141,7 @@ export interface SyncResult {
 }
 
 export const providers: {
+  aiand: SyncProvider<any>;
   ambient: SyncProvider<any>;
   anthropic: SyncProvider<any>;
   baseten: SyncProvider<any>;
@@ -144,6 +154,8 @@ export const providers: {
   digitalocean: SyncProvider<any>;
   edenai: SyncProvider<any>;
   empiriolabs: SyncProvider<any>;
+  "fireworks-ai": SyncProvider<any>;
+  friendli: SyncProvider<any>;
   "github-copilot": SyncProvider<any>;
   google: SyncProvider<any>;
   hyper: SyncProvider<any>;
@@ -169,6 +181,7 @@ export const providers: {
   wandb: SyncProvider<any>;
   xai: SyncProvider<any>;
 } = {
+  aiand,
   ambient,
   anthropic,
   baseten,
@@ -181,6 +194,8 @@ export const providers: {
   digitalocean,
   edenai,
   empiriolabs,
+  "fireworks-ai": fireworksAi,
+  friendli,
   "github-copilot": githubCopilot,
   google,
   hyper,
@@ -225,7 +240,7 @@ export const groups = {
     "vercel",
   ],
   cloudflare: ["cloudflare-ai-gateway", "cloudflare-workers-ai"],
-  direct: ["ambient", "anthropic", "baseten", "chutes", "cortecs", "deepinfra", "digitalocean", "github-copilot", "google", "hyper", "meta", "nebul", "ollama-cloud", "openai", "ovhcloud", "pioneer", "tinfoil", "venice", "wandb", "xai"],
+  direct: ["aiand", "ambient", "anthropic", "baseten", "chutes", "cortecs", "deepinfra", "digitalocean", "fireworks-ai", "friendli", "github-copilot", "google", "hyper", "meta", "nebul", "ollama-cloud", "openai", "ovhcloud", "pioneer", "tinfoil", "venice", "wandb", "xai"],
 } as const;
 
 type ProviderID = keyof typeof providers;
@@ -258,6 +273,7 @@ export async function syncProvider<SourceModel>(
   const caseNormalizedDesiredPaths = new Map<string, string>();
   const desiredMetadata = new Map<string, { model: z.infer<typeof ModelMetadata>; content: string }>();
   const skippedRemote: string[] = [];
+  const missingRemote = new Set<string>();
   const missingReasoning = new Map<string, string>();
 
   for (const sourceModel of sourceModels) {
@@ -280,6 +296,8 @@ export async function syncProvider<SourceModel>(
     if (translated === undefined) {
       const skippedID = provider.sourceID?.(sourceModel);
       if (skippedID !== undefined) skippedRemote.push(skippedID);
+      const missingID = provider.missingModelID?.(sourceModel);
+      if (missingID !== undefined) missingRemote.add(missingID);
       continue;
     }
 
@@ -459,6 +477,10 @@ export async function syncProvider<SourceModel>(
   const missingLocal: string[] = [];
   for (const relativePath of new Set([...existing.keys(), ...brokenSymlinks])) {
     if (desired.has(relativePath)) continue;
+    if (missingRemote.has(relativePath.slice(0, -5))) {
+      unchanged++;
+      continue;
+    }
     if (missingReasoning.has(relativePath.slice(0, -5))) {
       unchanged++;
       continue;
@@ -490,10 +512,11 @@ export async function syncProvider<SourceModel>(
     ...provider.missingNotice?.(missingLocal) ?? [],
   ];
 
-  const issueModels = [
+  const issueModels = [...new Set([
+    ...missingRemote.values(),
     ...(provider.skipCreates === true ? skippedRemote : []),
     ...missingReasoning.keys(),
-  ];
+  ])];
   if (
     provider.trackMissingModels !== false
     && issueModels.length > 0

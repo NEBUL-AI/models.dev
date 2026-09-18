@@ -1,0 +1,5 @@
+base_model = "typesafe/jev-latest"
+
+[cost]
+input = 0.042
+output = 0
