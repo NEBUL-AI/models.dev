@@ -134,6 +134,8 @@ test("keeps existing entries when the served alias no longer resolves to lab met
 test("resolves base models across org renames and quantization suffixes", () => {
   const cases: [string, string | null, string][] = [
     ["Qwen/Qwen3.8-27B-FP8", "Qwen/Qwen3.8-27B-FP8", "alibaba/qwen3.8-27b"],
+    // Hugging Face org paths are case-insensitive; a lowercase org must resolve identically.
+    ["qwen/qwen3.8-27b-fp8", "qwen/qwen3.8-27b-fp8", "alibaba/qwen3.8-27b"],
     ["nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16", "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16", "nvidia/nemotron-3-nano-30b-a3b"],
     ["mistralai/Mistral-Large-3-675B-Instruct-2512", "mistralai/Mistral-Large-3-675B-Instruct-2512", "mistral/mistral-large-2512"],
     ["mistralai/Mistral-Medium-3.5-128B", "mistralai/Mistral-Medium-3.5-128B", "mistral/mistral-medium-2604"],
@@ -204,13 +206,27 @@ test("fails closed when no entry matches the chat-model filter", () => {
 });
 
 test("parseModels keeps chat entries alongside filtered serving artifacts", () => {
+  const chat = { model_info: { mode: "chat", model_type: "llm" } };
   const parsed = nebul.parseModels({
     data: [
       { model_name: "Some/Embedding", model_info: { mode: null, model_type: "embedding" } },
-      { model_name: "Some/Chat", model_info: { mode: "chat", model_type: "llm" } },
+      { model_name: "Some/Chat-A", ...chat },
+      { model_name: "Some/Chat-B", ...chat },
+      { model_name: "Some/Chat-C", ...chat },
+      { model_name: "Some/Chat-D", ...chat },
+      { model_name: "Some/Chat-E", ...chat },
+      { model_name: "Some/Chat-F", ...chat },
     ],
   });
-  expect(parsed).toHaveLength(2);
+  expect(parsed).toHaveLength(7);
+});
+
+test("fails closed on a partial catalog so sync cannot prune healthy local files", () => {
+  expect(() =>
+    nebul.parseModels({
+      data: [{ model_name: "Some/Chat", model_info: { mode: "chat", model_type: "llm" } }],
+    }),
+  ).toThrow("treating the catalog as a partial fault");
 });
 
 test("rejects unknown reasoning effort values from the host", () => {

@@ -10,6 +10,8 @@ const API_ENDPOINT = "https://api.inference.nebul.io/model/info";
 const MODELS_DIR = path.join(import.meta.dirname, "..", "..", "..", "..", "..", "models");
 
 // Served org prefix -> models/ metadata namespace (HF org names differ from catalog labs).
+// Keys are lowercase; lookups normalize the org the same way (Hugging Face orgs are
+// case-insensitive in URLs, so e.g. "qwen/Qwen3.8-27B-FP8" is a valid ID shape).
 const ORG_TO_MODEL_PROVIDER: Record<string, string | undefined> = {
   "deepseek-ai": "deepseek",
   google: "google",
@@ -18,7 +20,7 @@ const ORG_TO_MODEL_PROVIDER: Record<string, string | undefined> = {
   moonshotai: "moonshotai",
   nvidia: "nvidia",
   openai: "openai",
-  Qwen: "alibaba",
+  qwen: "alibaba",
   "zai-org": "zhipuai",
 };
 
@@ -34,6 +36,14 @@ const BASE_MODEL_ALIASES: Record<string, string | undefined> = {
 // models.dev carries no matching lab metadata for them).
 const OUT_OF_SCOPE_PATTERNS = [/OCR/i];
 const OUT_OF_SCOPE_TAGS = new Set(["Guard Model", "Content Safety", "Private", "Internal"]);
+
+// Fail-closed floor against partial catalog faults. The in-scope chat catalog is
+// 12 models across 7 labs as of 2026-09-23; a truncated response (per-lab
+// serving outage, half-written deploy) that still passes the non-empty checks
+// would prune healthy local files via the runner's delete-missing pass. Any
+// catalog showing less than half the known-good size is treated as structurally
+// incomplete. Raise this deliberately as the catalog grows.
+const MIN_CHAT_MODELS = 6;
 
 const EffortValues = z.enum(["none", "minimal", "low", "medium", "high", "xhigh", "max", "default"]);
 
@@ -84,6 +94,12 @@ export const nebul = {
     // chat-model filter anymore (e.g. renamed model_type/mode values).
     if (!data.some(isCatalogChatModel)) {
       throw new Error("Nebul returned no usable chat models");
+    }
+    const chatCount = data.filter(isCatalogChatModel).length;
+    if (chatCount < MIN_CHAT_MODELS) {
+      throw new Error(
+        `Nebul returned only ${chatCount} usable chat models (expected at least ${MIN_CHAT_MODELS}); treating the catalog as a partial fault and skipping this run`,
+      );
     }
     return data;
   },
@@ -202,7 +218,7 @@ function baseModelCandidates(servedID: string, huggingfaceID: string | undefined
 function mapOrgToCandidate(id: string): string | undefined {
   const [org, ...modelParts] = id.split("/");
   if (org === undefined || modelParts.length === 0) return undefined;
-  const provider = ORG_TO_MODEL_PROVIDER[org];
+  const provider = ORG_TO_MODEL_PROVIDER[org.toLowerCase()];
   if (provider === undefined) return undefined;
   return `${provider}/${modelParts.join("/").toLowerCase()}`;
 }
