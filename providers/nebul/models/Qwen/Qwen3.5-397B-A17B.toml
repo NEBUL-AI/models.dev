@@ -1,13 +1,22 @@
-# Reasoning on this host: GET /v1/model/info marks this served ID with
-# supports_reasoning = false and exposes no reasoning_efforts for it
-# (https://api.inference.nebul.io/v1/model/info, re-verified 2026-09-23), and the
-# Chat Completions API documents no on/off toggle
-# (https://docs.nebul.io/docs/inference-api/models/chat-completions). Nebul serves
-# this ID with thinking disabled, so override the inherited lab default with
-# reasoning = false and declare no reasoning_options / interleaved on this host.
+# Reasoning controls (live probes 2026-09-23, POST /v1/chat/completions):
+# thinking is ON by default (reasoning_content traces); reasoning_effort
+# turns it off with none and the backing engine accepts every graded level —
+# minimal|low|medium|high|xhigh|max all return 200 with traces (some levels
+# may be aliased by the engine; none reject). The catalog's
+# supports_reasoning = false for this ID is a false negative (same pattern as
+# gpt-oss-120b, which reasons despite the flag).
+# Costs 0.63/3.78/0.15 are live values for this exact ID
+# (https://api.nebul.com/v1/model/info, re-checked 2026-09-22).
+# Sibling Qwen/Qwen3.8-27B-FP8 on this host accepts only none|low|medium|xhigh
+# (high|max|minimal get a 500), so the per-ID probe evidence above stands.
 base_model = "alibaba/qwen3.5-397b-a17b"
 
-reasoning = false
+[interleaved]
+field = "reasoning_content"
+
+[[reasoning_options]]
+type = "effort"
+values = ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
 
 [cost]
 input = 0.63

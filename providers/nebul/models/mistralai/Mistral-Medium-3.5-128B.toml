@@ -1,17 +1,21 @@
-# Efforts: reasoning_effort = low|medium|high|max — exactly /model/info's advertised
-# reasoning_efforts for this model (re-verified 2026-09-23), superseding the lab's
-# none|high set on this host.
+# Efforts: reasoning_effort = none|high (live probes 2026-09-23, POST
+# /v1/chat/completions) — high returns 200 with traces, none runs off;
+# low|medium|xhigh|max|minimal are rejected with
+# "reasoning_effort=<value> is not supported by Mistral models". The catalog
+# advertises reasoning_efforts = low|medium|high|max for this ID, which the
+# served engine does not honor; probes and the lab/peers (none|high) win.
+# Traces arrive in message.reasoning (probed 2026-09-23), so
+# interleaved = true.
 # https://api.inference.nebul.io/v1/model/info
-# Trace field: reasoning_content per https://docs.nebul.io/docs/inference-api/advanced-topics/reasoning
-# Costs 1.65/8.25 are the live catalog values for this exact ID (re-checked 2026-09-23).
+# Costs 1.65/8.25 are the live catalog values for this exact ID
+# (re-checked 2026-09-23).
 base_model = "mistral/mistral-medium-2604"
 
-[interleaved]
-field = "reasoning_content"
+interleaved = true
 
 [[reasoning_options]]
 type = "effort"
-values = ["low", "medium", "high", "max"]
+values = ["none", "high"]
 
 [cost]
 input = 1.65
