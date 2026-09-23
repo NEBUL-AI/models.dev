@@ -1,15 +1,20 @@
-# Reasoning control per Nebul's docs: GET /v1/model/info `reasoning_efforts` is the
-# per-model source of truth for "the reasoning_effort values each model meaningfully
-# accepts" (https://docs.nebul.io/docs/inference-api/models/model-catalog). It
-# advertises none for this model, and the Chat Completions API documents no on/off
-# toggle (https://docs.nebul.io/docs/inference-api/models/chat-completions), so this
-# host exposes no caller control here.
-# Trace field: reasoning_content — that page names Qwen3 thinking variants explicitly.
+# Reasoning controls (live probes 2026-09-23, POST /v1/chat/completions):
+# thinking is ON by default (reasoning_content traces); reasoning_effort
+# turns it off with none and on with low|medium|xhigh (200 + traces). The
+# backing engine rejects high|max|minimal with a 500, so the effective set is
+# none|low|medium|xhigh — matching the ai& entry for this same model. The
+# catalog's supports_reasoning = false for this ID is a false negative
+# (same pattern as gpt-oss-120b, which reasons despite the flag).
+# Costs 0.21/0.74/0.05 are live values for this exact ID
+# (https://api.nebul.com/v1/model/info, re-checked 2026-09-22).
 base_model = "alibaba/qwen3.8-27b"
-reasoning_options = []
 
 [interleaved]
 field = "reasoning_content"
+
+[[reasoning_options]]
+type = "effort"
+values = ["none", "low", "medium", "xhigh"]
 
 [cost]
 input = 0.21

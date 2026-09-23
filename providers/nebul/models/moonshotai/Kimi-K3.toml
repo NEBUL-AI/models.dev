@@ -1,16 +1,22 @@
-# Reasoning on this host: GET /v1/model/info marks this served ID with
-# supports_reasoning = false and exposes no reasoning_efforts for it
-# (https://api.inference.nebul.io/v1/model/info, checked 2026-09-22). Per
-# Nebul's docs that catalog is the source of truth for reasoning-capable
-# models, and the reasoning guide does not list Kimi among the
-# trace-returning families
-# (https://docs.nebul.io/docs/inference-api/advanced-topics/reasoning).
-# Nebul serves this ID with thinking disabled — no reasoning controls and no
-# reasoning_content traces — so override the inherited lab default with
-# reasoning = false and declare no reasoning_options / interleaved.
+# Reasoning controls (live probes 2026-09-23, POST /v1/chat/completions):
+# thinking is OFF by default; reasoning_effort = low|high|max turns it on
+# (200 + traces) and none runs it off. medium|xhigh|minimal are rejected with
+# "Kimi K3 supports thinking_effort values: low, high, max" — Nebul maps
+# reasoning_effort onto the lab's thinking_effort parameter. Traces arrive in
+# message.reasoning, so interleaved = true. The catalog's supports_reasoning =
+# false for this ID is a false negative (same pattern as gpt-oss-120b, which
+# reasons despite the flag).
+# Costs 4.73/23.63/1.13 are live values for this exact ID
+# (https://api.nebul.com/v1/model/info, re-checked 2026-09-22).
+# An earlier revision of this file asserted reasoning = false on catalog
+# evidence alone; probes supersede it.
 base_model = "moonshotai/kimi-k3"
 
-reasoning = false
+interleaved = true
+
+[[reasoning_options]]
+type = "effort"
+values = ["none", "low", "high", "max"]
 
 [cost]
 input = 4.73

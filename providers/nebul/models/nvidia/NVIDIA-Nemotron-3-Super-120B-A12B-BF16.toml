@@ -1,15 +1,24 @@
-# Reasoning control per Nebul's docs: GET /v1/model/info `reasoning_efforts` is the
-# per-model source of truth for "the reasoning_effort values each model meaningfully
-# accepts" (https://docs.nebul.io/docs/inference-api/models/model-catalog). It
-# advertises none for this model, and the Chat Completions API documents no on/off
-# toggle (https://docs.nebul.io/docs/inference-api/models/chat-completions), so this
-# host exposes no caller control here.
-# Trace field: reasoning_content — that page names the Nemotron family explicitly.
+# Reasoning controls (live probes 2026-09-23, POST /v1/chat/completions):
+# thinking is ON by default (reasoning_content traces); reasoning_effort
+# turns it off with none and the backing engine accepts every graded level —
+# minimal|low|medium|high|xhigh|max all return 200 with traces (some levels
+# may be aliased by the engine; none reject). The catalog's
+# supports_reasoning = false for this ID is a false negative (same pattern as
+# gpt-oss-120b, which reasons despite the flag). NVIDIA's first-party NIM
+# controls are NOT part of Nebul's surface here: a reasoning_budget field
+# gets a 400 and a "/no_think" system instruction does not disable traces.
+# limit.context = 1_000_000 is the live max_input_tokens for this exact ID
+# (https://api.nebul.com/v1/model/info, re-checked 2026-09-22); the lab
+# metadata carries the 262_144 default.
+# Costs 0.32/0.69/0.08 are live values for this exact ID (same source/date).
 base_model = "nvidia/nemotron-3-super-120b-a12b"
-reasoning_options = []
 
 [interleaved]
 field = "reasoning_content"
+
+[[reasoning_options]]
+type = "effort"
+values = ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
 
 [cost]
 input = 0.32

@@ -1,6 +1,8 @@
 # Sources (accessed 2026-09-10):
 # https://huggingface.co/Qwen/Qwen3-30B-A3B-Instruct-2507
 # Hub createdAt 2025-07-28 is the release; lastModified 2025-09-17 is the latest revision.
+# limit.context 262_144 per the HF model card (256K native context); cross-checked against
+# Nebul's live catalog max_input_tokens for its serving of this model (2026-09-23, agreement).
 
 name = "Qwen3 30B A3B Instruct 2507"
 description = "Updated non-thinking Qwen3 MoE with long context for instruction following and tool use"
