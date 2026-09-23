@@ -1,20 +1,22 @@
 # Served ID is zai-org/GLM-5.3 (Zhipu's Hugging Face org); canonical lab metadata lives at
 # models/zhipuai/glm-5.3.toml. This file carries Nebul-specific overrides only.
-# Reasoning control per Nebul's docs: GET /v1/model/info `reasoning_efforts` is the
-# per-model source of truth for "the reasoning_effort values each model meaningfully
-# accepts" (https://docs.nebul.io/docs/inference-api/models/model-catalog). The live
-# catalog (https://api.inference.nebul.io/model/info) advertises an empty list for
-# this exact ID — unlike sibling zai-org/GLM-5.3-Flash, which advertises
-# ["low","high","max"], so the differing values between the two IDs are intentional
-# — and the Chat Completions API documents no on/off toggle
-# (https://docs.nebul.io/docs/inference-api/models/chat-completions), so this host
-# exposes no caller control here.
+# Efforts: reasoning_effort = low|high|max on POST /v1/chat/completions — the values
+# the live catalog advertises in reasoning_efforts for this exact ID
+# (https://api.inference.nebul.io/v1/model/info, re-verified 2026-09-23; sibling
+# GLM-5.3-Flash advertises the same set) and the same set the lab
+# (providers/zai) and OpenRouter entries use. An earlier revision of this file
+# claimed the catalog advertised an empty list; that observation was stale.
 # Traces arrive in message.reasoning (GLM-5.x family), so interleaved = true
 # https://docs.nebul.io/docs/inference-api/advanced-topics/reasoning
+# limit.context = 1_048_576 is the live max_input_tokens for this exact ID
+# (re-checked 2026-09-23); costs 1.47/4.62/0.35 are live catalog values, same date.
 base_model = "zhipuai/glm-5.3"
-reasoning_options = []
 
 interleaved = true
+
+[[reasoning_options]]
+type = "effort"
+values = ["low", "high", "max"]
 
 [cost]
 input = 1.47

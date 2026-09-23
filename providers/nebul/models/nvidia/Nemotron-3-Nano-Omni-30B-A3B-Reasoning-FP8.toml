@@ -1,15 +1,17 @@
-# Reasoning control per Nebul's docs: GET /v1/model/info `reasoning_efforts` is the
-# per-model source of truth for "the reasoning_effort values each model meaningfully
-# accepts" (https://docs.nebul.io/docs/inference-api/models/model-catalog). It
-# advertises none for this model, and the Chat Completions API documents no on/off
-# toggle (https://docs.nebul.io/docs/inference-api/models/chat-completions), so this
-# host exposes no caller control here.
-# Trace field: reasoning_content — that page names the Nemotron family explicitly.
+# Reasoning on this host: GET /v1/model/info marks this served ID with
+# supports_reasoning = false and exposes no reasoning_efforts for it
+# (https://api.inference.nebul.io/v1/model/info, re-verified 2026-09-23), and the
+# Chat Completions API documents no on/off toggle
+# (https://docs.nebul.io/docs/inference-api/models/chat-completions). Nebul serves
+# this ID with thinking disabled, so override the inherited lab default with
+# reasoning = false and declare no reasoning_options / interleaved on this host.
+# (NVIDIA's first-party NIM API exposes toggle/budget controls for this model;
+# those wire fields are not part of Nebul's documented request surface.)
+# limit.context = 262_144 is the live max_input_tokens for this exact ID
+# (re-checked 2026-09-23); the lab metadata carries 256_000.
 base_model = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
-reasoning_options = []
 
-[interleaved]
-field = "reasoning_content"
+reasoning = false
 
 [cost]
 input = 0.16
