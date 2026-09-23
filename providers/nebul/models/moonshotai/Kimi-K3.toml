@@ -1,17 +1,16 @@
-# Reasoning control per Nebul's docs: GET /v1/model/info `reasoning_efforts` is the
-# per-model source of truth for "the reasoning_effort values each model meaningfully
-# accepts" (https://docs.nebul.io/docs/inference-api/models/model-catalog). It
-# advertises none for this model — the live response also marks this served ID with
-# supports_reasoning = false — and the Chat Completions API documents no on/off
-# toggle (https://docs.nebul.io/docs/inference-api/models/chat-completions), so this
-# host exposes no caller control here.
-# Trace field: reasoning_content per https://docs.nebul.io/docs/inference-api/advanced-topics/reasoning
+# Reasoning on this host: GET /v1/model/info marks this served ID with
+# supports_reasoning = false and exposes no reasoning_efforts for it
+# (https://api.inference.nebul.io/v1/model/info, checked 2026-09-22). Per
+# Nebul's docs that catalog is the source of truth for reasoning-capable
+# models, and the reasoning guide does not list Kimi among the
+# trace-returning families
+# (https://docs.nebul.io/docs/inference-api/advanced-topics/reasoning).
+# Nebul serves this ID with thinking disabled — no reasoning controls and no
+# reasoning_content traces — so override the inherited lab default with
+# reasoning = false and declare no reasoning_options / interleaved.
 base_model = "moonshotai/kimi-k3"
 
-reasoning_options = []
-
-[interleaved]
-field = "reasoning_content"
+reasoning = false
 
 [cost]
 input = 4.73

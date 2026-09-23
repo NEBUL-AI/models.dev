@@ -11,8 +11,8 @@ open_weights = true
 reasoning_options = []
 
 [cost]
-input = 0.25
-output = 1.5
+input = 0.15
+output = 1.2
 cache_read = 0.125
 
 [limit]
