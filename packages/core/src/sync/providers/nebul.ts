@@ -110,25 +110,28 @@ export const nebul = {
       : existing?.cost;
     const limit = info.max_input_tokens != null ? { context: info.max_input_tokens } : existing?.limit;
     if (existing === undefined && (baseModel === undefined || cost === undefined || limit === undefined)) return undefined;
+    // A hand-authored reasoning = false marks a served ID whose lab model reasons
+    // but which this host runs with thinking disabled (the catalog reports
+    // supports_reasoning = false and no reasoning_efforts). Keep the override and
+    // suppress the control/trace machinery entirely: no reasoning_options to
+    // require, and no interleaved side channel when no traces are returned.
+    const reasoningDisabled = existing?.reasoning === false;
     // Fail closed rather than emitting no reasoning_options: a reasoner with
     // neither advertised efforts nor authored options would sync as an empty
     // entry (no caller control). The runner keeps the file and lists it in the
     // skipped notice so the options can be hand-authored.
-    const isReasoner = baseModel !== undefined
+    const isReasoner = !reasoningDisabled && (baseModel !== undefined
       ? modelMetadata(baseModel).reasoning === true
-      : existing?.reasoning === true;
+      : existing?.reasoning === true);
     if (isReasoner && (info.reasoning_efforts ?? []).length === 0 && existing?.reasoning_options === undefined) {
       throw new MissingReasoningOptionsError(
         id,
         `${id} is a reasoning model, but Nebul advertises no reasoning_efforts and the catalog entry has no reasoning_options; hand-author them`,
       );
     }
-    const values = {
-      interleaved: existing?.interleaved,
-      reasoning_options: buildReasoningOptions(entry, existing),
-      cost,
-      limit,
-    };
+    const values = reasoningDisabled
+      ? { reasoning: false, interleaved: undefined, reasoning_options: undefined, cost, limit }
+      : { interleaved: existing?.interleaved, reasoning_options: buildReasoningOptions(entry, existing), cost, limit };
     if (baseModel !== undefined) {
       return {
         id,

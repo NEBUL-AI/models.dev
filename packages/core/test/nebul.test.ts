@@ -81,6 +81,22 @@ test("keeps authored effort sets when the host advertises none", () => {
   expect(translated?.model.reasoning_options).toEqual(authored);
 });
 
+test("keeps an authored reasoning = false override for a lab reasoner the host serves without thinking", () => {
+  const existing = {
+    base_model: "moonshotai/kimi-k3",
+    reasoning: false,
+    reasoning_options: [{ type: "effort" as const, values: ["low"] }],
+    interleaved: { field: "reasoning_content" as const },
+  } as ExistingModel;
+  const translated = nebul.translateModel(
+    nebulEntry("moonshotai/Kimi-K3", { reasoning_efforts: undefined }),
+    context(existing),
+  );
+  expect(translated?.model.reasoning).toBe(false);
+  expect(translated?.model.reasoning_options).toBeUndefined();
+  expect(translated?.model.interleaved).toBeUndefined();
+});
+
 test("fails closed when a reasoner advertises no efforts and none are authored", () => {
   const entry = nebulEntry("zai-org/GLM-5.3", { reasoning_efforts: [] });
   expect(() => nebul.translateModel(entry, context(undefined))).toThrow(MissingReasoningOptionsError);
