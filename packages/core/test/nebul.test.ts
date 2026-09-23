@@ -51,14 +51,13 @@ test("preserves authored reasoning controls when the host exposes no efforts", (
   expect(translated?.model.reasoning_options).toEqual(authored);
 });
 
-test("replaces authored options with the advertised effort entry when efforts are advertised", () => {
-  const authored = [
-    { type: "toggle" as const },
-    { type: "budget_tokens" as const },
-    { type: "effort" as const, values: ["low"] },
-  ];
+test("keeps authored probe-verified controls over the advertised effort list", () => {
+  // Live probes (2026-09-23) showed the advertised list can be wrong:
+  // the catalog advertised low|medium|high|max for Mistral-Medium-3.5 while
+  // the served engine rejects every value but high.
+  const authored = [{ type: "effort" as const, values: ["none", "high"] }];
   const translated = nebul.translateModel(nebulEntry("zai-org/GLM-5.3"), context(existingWith(authored)));
-  expect(translated?.model.reasoning_options).toEqual([{ type: "effort", values: ["low", "high", "max"] }]);
+  expect(translated?.model.reasoning_options).toEqual(authored);
 });
 
 test("carries authored interleaved through sync", () => {

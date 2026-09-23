@@ -179,14 +179,19 @@ function isCatalogChatModel(entry: NebulEntry): boolean {
     && !(info.display_tags ?? []).some((tag) => OUT_OF_SCOPE_TAGS.has(tag));
 }
 
-// Nebul documents exactly one reasoning control: reasoning_effort. When the
-// host advertises efforts, write that effort entry and nothing else —
-// lab-style toggles or budgets are not supported on this API. When it
-// advertises none, keep the authored options; a reasoner with neither is
-// rejected above so no empty options entry is ever synced.
+// Nebul documents exactly one reasoning control: reasoning_effort. Authored
+// options always win: they are live-probe evidence for what the served engine
+// accepts, while the catalog's advertised reasoning_efforts can be wrong
+// (proven 2026-09-23: it advertised low|medium|high|max for
+// Mistral-Medium-3.5, which rejects every value but high). For a new entry
+// with nothing authored yet, fall back to the advertised list; a reasoner
+// with neither is rejected above so no empty options entry is ever synced.
+// Lab-style toggles or budgets are not supported on this API unless a probe
+// of this host shows them.
 function buildReasoningOptions(entry: NebulEntry, existing: ExistingModel | undefined) {
+  if (existing?.reasoning_options !== undefined) return existing.reasoning_options;
   const efforts = entry.model_info.reasoning_efforts ?? [];
-  if (efforts.length === 0) return existing?.reasoning_options;
+  if (efforts.length === 0) return undefined;
   return [{ type: "effort" as const, values: efforts }];
 }
 
