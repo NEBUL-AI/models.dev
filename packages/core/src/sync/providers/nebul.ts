@@ -9,9 +9,10 @@ import { factorBaseModel, modelMetadata } from "./openrouter.js";
 const API_ENDPOINT = "https://api.inference.nebul.io/v1/model/info";
 const MODELS_DIR = path.join(import.meta.dirname, "..", "..", "..", "..", "..", "models");
 
-// Served org prefix -> models/ metadata namespace (HF org names differ from catalog labs).
-// Keys are lowercase; lookups normalize the org the same way (Hugging Face orgs are
-// case-insensitive in URLs, so e.g. "qwen/Qwen3.8-27B-FP8" is a valid ID shape).
+// Maps the org prefix of a served ID to the lab namespace under models/.
+// The Hugging Face org name and the lab name in models/ often differ.
+// Keys are lowercase, and the lookup lowercases the org the same way. Hugging Face
+// org paths are case-insensitive in URLs, so "qwen/Qwen3.8-27B-FP8" is a valid ID shape.
 const ORG_TO_MODEL_PROVIDER: Record<string, string | undefined> = {
   "deepseek-ai": "deepseek",
   google: "google",
@@ -24,25 +25,26 @@ const ORG_TO_MODEL_PROVIDER: Record<string, string | undefined> = {
   "zai-org": "zhipuai",
 };
 
-// Served IDs whose canonical metadata lives under a differently-named lab entry.
+// Served IDs whose lab metadata in models/ lives under a different model name.
 const BASE_MODEL_ALIASES: Record<string, string | undefined> = {
   "mistralai/Mistral-Large-3-675B-Instruct-2512": "mistral/mistral-large-2512",
 };
 
-// Catalog scope is general chat models. The public catalog also lists specialized
-// document-OCR models by name, and flags internal-only or safety-infrastructure
-// entries via display_tags; keep all of those out (not coding/chat targets, and
-// models.dev carries no matching lab metadata for them).
+// The sync scope is general chat models. The catalog also lists specialized
+// OCR (document text recognition) models by name and flags private, internal,
+// and safety entries with display_tags. The filter keeps all of those out,
+// because they are not chat models and models.dev has no matching lab metadata for them.
 const OUT_OF_SCOPE_PATTERNS = [/OCR/i];
 const OUT_OF_SCOPE_TAGS = new Set(["Guard Model", "Content Safety", "Private", "Internal"]);
 
-// Fail-closed floor against partial catalog faults. The in-scope chat catalog is
-// ~14 models as of 2026-09-24; a truncated response (per-lab serving outage,
-// half-written deploy) that still passes the non-empty checks should not be
-// treated as the real catalog. Defense in depth: the provider also runs with
-// deleteMissing: false, so even a bad catalog cannot prune curated local files.
-// Any catalog showing less than half the known-good size is treated as
-// structurally incomplete. Raise this deliberately as the catalog grows.
+// The sync fails closed (it throws on bad data instead of syncing it) on a
+// partial catalog. The in-scope chat catalog has ~14 models as of 2026-09-24.
+// A truncated response (a per-lab serving outage or a half-written deploy) can
+// pass the non-empty checks in parseModels. The code must not treat it as the
+// real catalog. As a second guard, the provider runs with deleteMissing: false,
+// so even a bad catalog cannot delete curated local files. A catalog with less
+// than half the known-good size is structurally incomplete. Raise this number
+// deliberately as the catalog grows.
 const MIN_CHAT_MODELS = 6;
 
 const ModelInfo = z.object({
@@ -55,9 +57,10 @@ const ModelInfo = z.object({
   max_input_tokens: z.number().nullable().optional(),
   mode: z.string().nullable(),
   model_type: z.string().nullable(),
-  // Advertised only; never synced (probes proved the list unreliable), so accept
-  // any string. A strict enum here would let a future unknown value throw and
-  // fail the whole hourly run, blocking cost/context refreshes for curated models.
+  // The catalog only advertises this list, and the sync never copies it into an
+  // entry, because probes proved the list unreliable. The schema accepts any
+  // string. A strict enum throws on a future unknown value. That failure stops
+  // the hourly run and blocks cost/context refreshes for curated models.
   reasoning_efforts: z.array(z.string()).nullable().optional(),
   superseded_by_model_name: z.string().nullable().optional(),
 }).passthrough();
@@ -77,17 +80,16 @@ export const nebul = {
   id: "nebul",
   name: "Nebul",
   modelsDir: "providers/nebul/models",
-  // Nebul is a curated provider: only the hand-authored flagship models ship.
-  // The catalog is authoritative for their live cost/context, but must never
-  // grow or shrink the local set: skipCreates keeps any other in-scope chat
+  // Nebul is a curated provider, so only the hand-authored flagship models ship.
+  // The catalog is authoritative for their live cost and context, but it must
+  // never grow or shrink the local set. skipCreates keeps any other in-scope chat
   // model out, and deleteMissing: false keeps a curated model that drops out of
-  // the catalog (zai-org/GLM-5.3 has been intermittently absent) instead of
-  // silently removing it.
+  // the catalog (zai-org/GLM-5.3 is intermittently absent) instead of deleting it.
   skipCreates: true,
   deleteMissing: false,
-  // Skipped reasoners (fail-closed below) and out-of-catalog chat models are
-  // expected; opening missing-model issues for them would request models this
-  // provider deliberately does not curate.
+  // Skipped reasoners (the fail-closed path below) and chat models outside the
+  // curation are expected. Missing-model issues for them ask for models that
+  // this provider deliberately does not curate.
   trackMissingModels: false,
   async fetchModels() {
     const response = await fetch(API_ENDPOINT);
@@ -98,13 +100,14 @@ export const nebul = {
   },
   parseModels(raw) {
     const data = NebulResponse.parse(raw).data;
-    // An empty catalog is an upstream fault; syncing it would delete every
-    // local model file via the delete-missing pass, so fail loudly instead.
+    // An empty catalog is an upstream fault. The delete-missing pass deletes
+    // every local model file when the sync accepts it, so the code throws instead.
     if (data.length === 0) {
       throw new Error("Nebul returned an empty model catalog");
     }
-    // Same failure mode if the response shape drifts and no entry matches the
-    // chat-model filter anymore (e.g. renamed model_type/mode values).
+    // The same failure applies when the response shape drifts and no entry
+    // matches the chat-model filter anymore, for example after renamed
+    // model_type or mode values.
     if (!data.some(isCatalogChatModel)) {
       throw new Error("Nebul returned no usable chat models");
     }
@@ -116,21 +119,22 @@ export const nebul = {
     }
     return data;
   },
-  // Unauthenticated /v1/model/info is authoritative for the curated entries'
-  // live cost/context. Because the provider runs with skipCreates and
-  // deleteMissing: false, translateModel only ever refreshes existing files; any
-  // other in-scope chat model is reported via skippedNotice, and a curated model
-  // missing from the catalog is retained and reported via missingNotice. Whole-
-  // catalog faults still fail closed in parseModels.
+  // The unauthenticated /v1/model/info endpoint is authoritative for the live
+  // cost and context of the curated entries. The provider runs with skipCreates
+  // and deleteMissing: false, so translateModel only refreshes existing files.
+  // skippedNotice reports any other in-scope chat model, and missingNotice
+  // reports a curated model that the catalog no longer lists. Whole-catalog
+  // faults still fail closed in parseModels.
   translateModel(entry, context) {
     if (!isCatalogChatModel(entry)) return undefined;
     const id = entry.model_name;
     const info = entry.model_info;
     const existing = context.existing(id);
-    // Existing entries must survive incomplete source data — a transient null
-    // price or an unresolved alias would otherwise delete the hand-authored
-    // TOML on the next run. They keep their authored base_model and cost/limit;
-    // only brand-new models need a fully-priced, resolvable source entry.
+    // Existing entries must survive incomplete source data. A transient null
+    // price or an unresolved alias otherwise deletes the hand-authored TOML on
+    // the next run. Existing entries keep their authored base_model and
+    // cost/limit, and only new models need a source entry with complete pricing
+    // and a resolvable base.
     const baseModel = existing?.base_model ?? resolveBaseModel(id, info.huggingface_id ?? undefined);
     const cost = info.input_cost_per_1m_tokens != null && info.output_cost_per_1m_tokens != null
       ? {
@@ -141,17 +145,18 @@ export const nebul = {
       : existing?.cost;
     const limit = info.max_input_tokens != null ? { context: info.max_input_tokens } : existing?.limit;
     if (existing === undefined && (baseModel === undefined || cost === undefined || limit === undefined)) return undefined;
-    // A hand-authored reasoning = false marks a served ID whose lab model reasons
-    // but which this host runs with thinking disabled (the catalog reports
-    // supports_reasoning = false and no reasoning_efforts). Keep the override and
-    // suppress the control/trace machinery entirely: no reasoning_options to
-    // require, and no interleaved side channel when no traces are returned.
+    // A hand-authored reasoning = false marks a served ID whose lab model
+    // reasons but that this host serves with thinking disabled. The catalog
+    // reports supports_reasoning = false and no reasoning_efforts for it. Keep
+    // the override and suppress the reasoning controls and traces. The entry
+    // then needs no reasoning_options, and no interleaved side channel applies
+    // when the host returns no traces.
     const reasoningDisabled = existing?.reasoning === false;
-    // Fail closed unless caller control is probe-verified and hand-authored:
-    // publishing the catalog's advertised reasoning_efforts unreviewed would
-    // sync proven-wrong controls (2026-09-23: it advertised low|medium|high|max
-    // for one model, whose engine rejects every value but high). The runner
-    // skips the ID so the options can be hand-authored from live probes.
+    // Fail closed unless the caller control is hand-authored from live probe
+    // evidence. Probes proved the advertised reasoning_efforts wrong in one
+    // case: on 2026-09-23 the catalog advertised low|medium|high|max for one
+    // model, and its engine rejects every value but high. The runner skips the
+    // ID so that the options can be hand-authored from live probes.
     const isReasoner = !reasoningDisabled && (baseModel !== undefined
       ? modelMetadata(baseModel).reasoning === true
       : existing?.reasoning === true);
@@ -170,12 +175,14 @@ export const nebul = {
         model: factorBaseModel(baseModel, values, limit) as SyncedModel,
       };
     }
-    // Existing standalone definition whose served alias no longer resolves:
-    // keep the authored fields, refreshing only what /model/info still provides.
+    // The existing standalone definition has a served alias that no longer
+    // resolves. Keep the authored fields, and refresh only what /model/info
+    // still provides.
     return { id, model: { ...existing, ...values } as SyncedModel };
   },
-  // Only report in-scope chat models whose base_model could not be resolved; filtered
-  // entries (embeddings, rerankers, out-of-scope specialized models, superseded IDs) skip silently.
+  // Report only in-scope chat models whose base_model does not resolve. Filtered
+  // entries (embeddings, rerankers, out-of-scope specialized models, superseded
+  // IDs) skip silently.
   sourceID(entry: NebulEntry) {
     return isCatalogChatModel(entry) ? entry.model_name : undefined;
   },
@@ -202,22 +209,21 @@ function isCatalogChatModel(entry: NebulEntry): boolean {
     && !(info.display_tags ?? []).some((tag) => OUT_OF_SCOPE_TAGS.has(tag));
 }
 
-// Nebul documents exactly one reasoning control: reasoning_effort. Authored
-// options are the only options ever synced: they are live-probe evidence for
-// what the served engine accepts, while the catalog's advertised
-// reasoning_efforts are probe-proven unreliable (2026-09-23: it advertised
-// low|medium|high|max for one model, whose engine rejects every value but
-// high). The advertised list is therefore never copied into an entry — a
-// reasoner with nothing authored is rejected above, and a non-reasoner carries
-// no options. Lab-style toggles or budgets are not supported on this API
-// unless a probe of this host shows them.
+// Nebul documents exactly one reasoning control: reasoning_effort. The sync
+// copies only hand-authored options into an entry, because probes proved the
+// advertised reasoning_efforts unreliable (on 2026-09-23 the catalog advertised
+// low|medium|high|max for one model, and its engine rejects every value but
+// high). translateModel rejects a reasoner with no authored options, and a
+// non-reasoner carries no options. The API supports no lab-style toggles or
+// budget controls unless a probe of this host shows them.
 
 function resolveBaseModel(servedID: string, huggingfaceID: string | undefined): string | undefined {
   return baseModelCandidates(servedID, huggingfaceID).find(canonicalExists);
 }
 
-// existsSync is case-insensitive on Windows/macOS; verify the real on-disk filename case
-// so the resolved base_model matches the canonical metadata exactly (and CI on Linux).
+// existsSync is case-insensitive on Windows and macOS. readdirSync reads the
+// real on-disk filename case, so the resolved base_model matches the models/
+// filename exactly, and CI on Linux passes.
 function canonicalExists(candidate: string): boolean {
   const file = path.join(MODELS_DIR, `${candidate}.toml`);
   if (!existsSync(file)) return false;
@@ -245,9 +251,11 @@ function mapOrgToCandidate(id: string): string | undefined {
   return `${provider}/${modelParts.join("/").toLowerCase()}`;
 }
 
-// Hosts serve quantized checkpoints (e.g. -FP8, -BF16) of weights whose canonical
-// metadata is published for the base precision; try those names without the suffix.
-// NVIDIA also prefixes checkpoints with "NVIDIA-", which the metadata names drop.
+// Hosts serve quantized checkpoints (the same weights in a smaller number
+// format, for example -FP8, -BF16), and the lab publishes the metadata under
+// the base-precision name. The resolver also tries the names without the
+// quantization suffix. NVIDIA prefixes checkpoint names with "NVIDIA-", and the
+// metadata names drop that prefix.
 function quantizationStripped(candidate: string | undefined): string[] {
   if (candidate === undefined) return [];
   const withoutQuant = candidate.replace(/-(fp8|bf16|fp4|int8)$/i, "");

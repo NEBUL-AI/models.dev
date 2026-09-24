@@ -1,6 +1,7 @@
-# Effort: reasoning_effort = low|high|max (catalog + zai/OpenRouter parity).
-# Traces arrive in reasoning_content.
-# Costs/context live-verified via https://api.inference.nebul.io/v1/model/info on 2026-09-23.
+# Effort: reasoning_effort = low|high|max. The set matches the catalog and the zai
+# and OpenRouter entries for the same model. Traces arrive in reasoning_content.
+# The costs and context match https://api.inference.nebul.io/v1/model/info on
+# 2026-09-23.
 base_model = "zhipuai/glm-5.3"
 
 [interleaved]

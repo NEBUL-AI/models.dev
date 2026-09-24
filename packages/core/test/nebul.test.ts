@@ -35,7 +35,8 @@ function existingWith(reasoning_options: ExistingModel["reasoning_options"]): Ex
 const context = (existing: ExistingModel | undefined) => ({ existing: () => existing });
 
 test("syncs Nebul's factored overrides against resolved lab metadata", () => {
-  // Non-reasoner lab: new entries keep factored pricing/context and carry no options.
+  // The lab model here does not reason. A new entry keeps the factored pricing
+  // and context and carries no options.
   const translated = nebul.translateModel(
     nebulEntry("mistralai/Mistral-Large-3-675B-Instruct-2512", { max_input_tokens: 1_048_576 }),
     context(undefined),
@@ -52,9 +53,10 @@ test("syncs Nebul's factored overrides against resolved lab metadata", () => {
 });
 
 test("fails closed for a new reasoner that only advertises efforts", () => {
-  // The advertised list is probe-proven unreliable (live probes found a catalog
-  // model advertising low|medium|high|max whose engine rejected every value but
-  // high), so a new reasoner must never inherit it — options need live probes first.
+  // Probes proved the advertised list unreliable: one catalog model advertised
+  // low|medium|high|max, and its engine rejected every value but high. A new
+  // reasoner must never inherit the list. The options need live probe evidence
+  // first.
   const entry = nebulEntry("zai-org/GLM-5.3");
   expect(() => nebul.translateModel(entry, context(undefined))).toThrow(MissingReasoningOptionsError);
 });
@@ -66,9 +68,9 @@ test("preserves authored reasoning controls when the host exposes no efforts", (
 });
 
 test("keeps authored probe-verified controls over the advertised effort list", () => {
-  // Live probes (2026-09-23) showed the advertised list can be wrong:
-  // one catalog model advertised low|medium|high|max while its served engine
-  // rejected every value but high.
+  // Live probes on 2026-09-23 showed that the advertised list can be wrong: one
+  // catalog model advertised low|medium|high|max, and its served engine rejected
+  // every value but high.
   const authored = [{ type: "effort" as const, values: ["none", "high"] }];
   const translated = nebul.translateModel(nebulEntry("zai-org/GLM-5.3"), context(existingWith(authored)));
   expect(translated?.model.reasoning_options).toEqual(authored);
@@ -149,13 +151,14 @@ test("resolves base models across org renames and quantization suffixes", () => 
   const cases: [string, string | null, string][] = [
     ["zai-org/GLM-5.3", "zai-org/GLM-5.3", "zhipuai/glm-5.3"],
     ["Qwen/Qwen3.5-397B-A17B", "Qwen/Qwen3.5-397B-A17B", "alibaba/qwen3.5-397b-a17b"],
-    // Hugging Face org paths are case-insensitive; a lowercase org must resolve identically.
+    // Hugging Face org paths are case-insensitive, so a lowercase org must
+    // resolve identically.
     ["qwen/qwen3.5-397b-a17b", "qwen/qwen3.5-397b-a17b", "alibaba/qwen3.5-397b-a17b"],
     ["nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16", "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16", "nvidia/nemotron-3-super-120b-a12b"],
     ["mistralai/Mistral-Large-3-675B-Instruct-2512", "mistralai/Mistral-Large-3-675B-Instruct-2512", "mistral/mistral-large-2512"],
   ];
-  // Authored options in context keep reasoner labs out of the fail-closed path
-  // (this case asserts base_model resolution only).
+  // The authored options in the context keep reasoner labs out of the
+  // fail-closed path. This case asserts base_model resolution only.
   for (const [model_name, huggingface_id, expected] of cases) {
     const entry = nebulEntry(model_name, { huggingface_id });
     expect(
@@ -248,9 +251,9 @@ test("fails closed on a partial catalog so sync cannot prune healthy local files
 });
 
 test("accepts and ignores unknown advertised reasoning effort values", () => {
-  // The advertised list is never synced, so an unrecognized value must not abort
-  // parsing: a strict enum would fail the hourly run and block cost/context
-  // refreshes for the curated models.
+  // The sync never copies the advertised list, so an unrecognized value must
+  // not abort parsing. A strict enum fails the hourly run and blocks
+  // cost/context refreshes for the curated models.
   const parsed = NebulResponse.parse({
     data: [{ model_name: "Some/Chat", model_info: { mode: "chat", model_type: "llm", reasoning_efforts: ["ultra"] } }],
   });
@@ -264,7 +267,7 @@ test("accepts and ignores unknown advertised reasoning effort values", () => {
   expect(translated?.model.reasoning_options).toEqual(authored);
 });
 
-// Nebul is a curated provider: exactly the four requested flagship models ship,
+// Nebul is a curated provider. Exactly the four requested flagship models ship,
 // and the catalog sync must never add to or remove from that set.
 const CURATED_MODEL_IDS = [
   "Qwen/Qwen3.5-397B-A17B",
